@@ -1,0 +1,136 @@
+# Fehlerrechnung
+
+import numpy as np
+import math
+
+
+# 参数值 -------------------------------------------------------
+
+# 时间数据（单位：s）
+times = np.array([3.66, 3.74, 3.72, 3.77, 3.79, 3.74, 3.74, 3.79, 3.63, 3.77])
+
+# 平均时间 t
+t = np.mean(times)   # s
+
+# 其他物理量（全部先换成 SI 单位）
+r = 0.635 / 2 / 100          # m   (直径 0.635 cm -> 半径)
+g = 9.81                     # m/s^2
+m = 0.2922 / 1000           # kg
+rho = 1.222 * 1000          # kg/m^3   (液体密度)
+h = 46.7 / 100              # m
+R = 5.23 / 2 / 100          # m   (管子直径 5.23 cm -> 半径)
+
+
+# 不确定度 -----------------------------------------------------
+
+# 1) r 的不确定度
+# 已知：卡尺给的是直径最大误差 ±0.05 mm
+# 所以对半径：
+# delta_r = 0.05 mm / (2 * sqrt(3))
+delta_r = 0.05 / 1000 / (2 * math.sqrt(3))   # m
+
+# 2) m 的不确定度
+# 天平给出：
+# Linearitäts- und Skalierungsabweichung < 0.0005 g
+# Reproduzierbarkeit < 0.0002 g
+# 两项都按矩形分布，再合成
+delta_m1 = 0.0005 / 1000 / math.sqrt(3)   # kg
+delta_m2 = 0.0002 / 1000 / math.sqrt(3)   # kg
+delta_m = np.sqrt(delta_m1**2 + delta_m2**2)
+
+# 3) rho 的不确定度
+# 你已说明：0.001 g/ml 是最小分度，所以用 d/(2*sqrt(3))
+delta_rho = 0.001 * 1000 / (2 * math.sqrt(3))   # kg/m^3
+
+# 4) t 的不确定度
+# Typ-A: 标准差的均值不确定度
+s_t = np.std(times, ddof=1)          # Stichprobenstandardabweichung
+delta_t = s_t / np.sqrt(len(times))  # s
+
+# 5) h 的不确定度
+# 你已说明：1 mm 是最小刻度，所以用 d/(2*sqrt(3))
+delta_h = 1 / 1000 / (2 * math.sqrt(3))   # m
+
+
+# 偏导公式 -----------------------------------------------------
+# eta = (2*r^2*g*t/(9*h)) * (3m/(4*pi*r^3) - rho)
+#
+# 为了误差传播，分别对 r, m, t, h, rho 求偏导
+
+dr = (2 * g * t / (9 * h)) * (-(3 * m) / (4 * np.pi * r**2) - 2 * r * rho)
+dm = g * t / (6 * np.pi * h * r)
+dt = (2 * g * r**2 / (9 * h)) * ((3 * m) / (4 * np.pi * r**3) - rho)
+dh = -(2 * g * r**2 * t / (9 * h**2)) * ((3 * m) / (4 * np.pi * r**3) - rho)
+drho = -(2 * g * r**2 * t) / (9 * h)
+
+
+# 误差值 -------------------------------------------------------
+
+delta_eta = np.sqrt(
+    (dr * delta_r)**2 +
+    (dm * delta_m)**2 +
+    (dt * delta_t)**2 +
+    (dh * delta_h)**2 +
+    (drho * delta_rho)**2
+)
+
+print("Fehlerabweichung_eta:", delta_eta)
+
+
+# eta 计算 -----------------------------------------------------
+
+numerator = 2 * r**2 * g * t
+denominator = 9 * h
+
+sphere_density = (3 * m) / (4 * math.pi * r**3)
+density_difference = sphere_density - rho
+
+eta = (numerator / denominator) * density_difference
+
+print("eta:", eta)
+print("density_difference:", density_difference)
+print("sphere_density:", sphere_density)
+
+
+# 管子修正计算 -------------------------------------------------
+
+wall_effect = 1 + 2.4 * (r / R)
+denominator2 = 9 * h * wall_effect
+eta2 = (numerator / denominator2) * density_difference
+
+print("eta2:", eta2)
+
+# 按题目要求，Gl. (12) 的不确定度近似缩放
+delta_eta2 = delta_eta / wall_effect
+print("Fehlerabweichung_eta2:", delta_eta2)
+
+
+# Reynolds 计算根据 eta ----------------------------------------
+
+# Re = (rho * v * 2r) / eta
+# 其中 v = h/t
+# 所以 Re = 2 * r * rho * h / (eta * t)
+
+numerator3 = 2 * r * rho * h
+
+denominator3 = eta * t
+reynolds_number1 = numerator3 / denominator3
+print("reynolds_number1:", reynolds_number1)
+
+
+# Reynolds 计算根据 eta2 ---------------------------------------
+
+denominator4 = eta2 * t
+reynolds_number2 = numerator3 / denominator4
+print("reynolds_number2:", reynolds_number2)
+
+print(f"r = {r}")
+print(f"delta_r = {delta_r}")
+print(f"m = {m}")
+print(f"delta_m = {delta_m}")
+print(f"t = {t}")
+print(f"delta_t = {delta_t}")
+print(f"h = {h}")
+print(f"delta_h = {delta_h}")
+print(f"rho = {rho}")
+print(f"delta_rho = {delta_rho}")
